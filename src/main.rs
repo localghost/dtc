@@ -17,10 +17,10 @@ struct Args {
     )]
     src_tz: Option<String>,
 
-    #[arg(default_value_t = String::from("gmt"))]
+    #[arg(default_value_t = String::from("gmt"), help="Timezone to convert to")]
     dest_tz: String,
 
-    #[arg(short, long, help = "Use this timezone if none found in DATETIME")]
+    #[arg(short, long)]
     verbose: bool,
 }
 
