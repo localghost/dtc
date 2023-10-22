@@ -19,3 +19,9 @@ When no timezone is provided UTC is assumed:
 dtc "2023-05-07 09:13:03" utc
 2023-05-07 09:13:03 UTC
 ```
+
+From UNIX timestamp:
+```
+dtc 1698012234 edt
+2023-10-22 18:03:54 EDT
+```
