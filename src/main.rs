@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate lazy_static;
+
 use std::{collections::HashMap, process::exit};
 
 use chrono::{
@@ -22,6 +25,10 @@ struct Args {
 const FORMATS: &[&str] = &["%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"];
 
 static mut VERBOSE: bool = false;
+
+lazy_static! {
+    static ref TIMEZONES_DB: HashMap<String, chrono_tz::Tz> = build_timezone_db();
+}
 
 fn verbose(message: &str) {
     // This is set at the start of the program and never modified again.
@@ -119,8 +126,7 @@ fn parse_timezone(datetime: DateTime<Utc>, timezone: &str) -> Result<FixedOffset
             }
         }
     }
-    let timezones = build_timezone_db();
-    if let Some(timezone) = timezones.get(&timezone.to_lowercase()) {
+    if let Some(timezone) = TIMEZONES_DB.get(&timezone.to_lowercase()) {
         let datetime = datetime.with_timezone(timezone);
         return Ok(datetime.with_timezone(timezone).offset().fix());
     }
@@ -133,6 +139,7 @@ fn parse_datetime(datetime: &str) -> Result<DateTime<FixedOffset>, ()> {
         verbose(&format!("Trying out format {format}"));
         match NaiveDateTime::parse_and_remainder(datetime, format) {
             ParseResult::Ok((datetime, remainder)) => {
+                // TODO: Use local timezone if not provided.
                 return Ok(datetime
                     .and_local_timezone(
                         parse_timezone(datetime.and_utc(), remainder.trim()).unwrap(),
@@ -153,10 +160,19 @@ fn build_timezone_db() -> HashMap<String, chrono_tz::Tz> {
         HashMap::<String, chrono_tz::Tz>::with_capacity(chrono_tz::TZ_VARIANTS.len());
     let utc_now = Utc::now().naive_utc();
     for tz in chrono_tz::TZ_VARIANTS {
-        let datetime = tz.from_utc_datetime(&utc_now);
-        timezones.insert(datetime.offset().abbreviation().to_lowercase(), tz);
+        timezones.insert(
+            tz.from_utc_datetime(&utc_now)
+                .offset()
+                .abbreviation()
+                .to_lowercase(),
+            tz,
+        );
     }
     timezones
+}
+
+fn convert(datetime: &DateTime<FixedOffset>, timezone: &chrono_tz::Tz) -> DateTime<chrono_tz::Tz> {
+    datetime.fixed_offset().with_timezone(timezone)
 }
 
 fn main() {
@@ -165,8 +181,7 @@ fn main() {
         VERBOSE = args.verbose;
     }
 
-    let timezones = build_timezone_db();
-    let dest_tz = match timezones.get(&args.dest_tz.to_lowercase()) {
+    let dest_tz = match TIMEZONES_DB.get(&args.dest_tz.to_lowercase()) {
         Some(tz) => tz,
         None => {
             eprintln!(
@@ -177,11 +192,47 @@ fn main() {
         }
     };
 
-    let datetime_parsed = parse(&args.datetime)
-        .unwrap_or_else(|()| panic!("Could not parse {}", args.datetime));
+    let datetime_parsed =
+        parse(&args.datetime).unwrap_or_else(|()| panic!("Could not parse {}", args.datetime));
     verbose(&datetime_parsed.to_string());
-    println!("{datetime_parsed}");
 
-    let datetime_converted = datetime_parsed.fixed_offset().with_timezone(dest_tz);
-    println!("{datetime_converted}");
+    println!("{}", convert(&datetime_parsed, dest_tz));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_rfc3339() {
+        let datetime = "2023-10-22T10:34:16+01:00";
+        assert_eq!(datetime, parse(datetime).unwrap().to_rfc3339());
+    }
+
+    #[test]
+    fn parse_timezone_abbreviation() {
+        let datetime = "2023-10-22 10:34:16 jst";
+        assert_eq!(
+            "2023-10-22 10:34:16 +09:00",
+            parse(datetime).unwrap().to_string()
+        )
+    }
+
+    #[test]
+    fn parse_without_timezone() {
+        let datetime = "2023-10-22 10:34:16";
+        assert_eq!(
+            "2023-10-22T10:34:16+00:00",
+            parse(datetime).unwrap().to_rfc3339()
+        )
+    }
+
+    #[test]
+    fn convert_datetime_to_utc() {
+        let datetime = DateTime::parse_from_rfc3339("2023-10-22T10:34:16+02:00").unwrap();
+        assert_eq!(
+            Into::<DateTime<Utc>>::into(datetime).to_rfc3339(),
+            convert(&datetime, &chrono_tz::Tz::UTC).to_rfc3339()
+        );
+    }
 }

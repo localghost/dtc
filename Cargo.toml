@@ -9,3 +9,4 @@ edition = "2021"
 chrono = "0.4.31"
 chrono-tz = "0.8.3"
 clap = { version = "4.4.6", features = ["derive"] }
+lazy_static = "1.4.0"
