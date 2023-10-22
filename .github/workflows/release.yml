@@ -19,5 +19,5 @@ jobs:
         with:
           RUSTTARGET: x86_64-unknown-linux-musl
           ARCHIVE_TYPES: tar.gz
-          MINIFY: "yes"
+          MINIFY: "true"
           TOOLCHAIN_VERSION: stable
