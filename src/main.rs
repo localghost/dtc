@@ -110,14 +110,17 @@ fn parse(datetime: &str) -> Result<DateTime<FixedOffset>, ()> {
     parse_datetime(&datetime)
 }
 
+// First tries to parse timezone using standard format. If that fails it tries to match the timezone
+// against the timezone database.
+// The `datetime` is needed to establish if e.g. for the timezone a daylight saving time should be
+// applied.
 fn parse_timezone(datetime: DateTime<Utc>, timezone: &str) -> Result<FixedOffset, ()> {
     let datetime_str = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
     for format in &["%#z", "%:z", "%::z", "%Z"] {
         verbose(&format!("Trying out format {format}"));
-        match DateTime::parse_from_str(
-            &format!("{} {}", datetime_str, timezone.to_uppercase()),
-            &format!("%Y-%m-%d %H:%M:%S {format}"),
-        ) {
+        let format = format!("%Y-%m-%d %H:%M:%S {format}");
+        let datetime_str = format!("{} {}", datetime_str, timezone.to_uppercase());
+        match DateTime::parse_from_str(&datetime_str, &format) {
             ParseResult::Ok(datetime) => {
                 return Ok(*datetime.offset());
             }
@@ -126,8 +129,8 @@ fn parse_timezone(datetime: DateTime<Utc>, timezone: &str) -> Result<FixedOffset
             }
         }
     }
+
     if let Some(timezone) = TIMEZONES_DB.get(&timezone.to_lowercase()) {
-        let datetime = datetime.with_timezone(timezone);
         return Ok(datetime.with_timezone(timezone).offset().fix());
     }
 
@@ -140,6 +143,7 @@ fn parse_datetime(datetime: &str) -> Result<DateTime<FixedOffset>, ()> {
         match NaiveDateTime::parse_and_remainder(datetime, format) {
             ParseResult::Ok((datetime, remainder)) => {
                 let remainder = remainder.trim();
+                // Assume UTC if no timezone is provided
                 let datetime = if remainder.is_empty() {
                     datetime.and_utc().fixed_offset()
                 } else if remainder.to_lowercase() == "local" {
@@ -150,7 +154,6 @@ fn parse_datetime(datetime: &str) -> Result<DateTime<FixedOffset>, ()> {
                         .unwrap()
                         .fixed_offset()
                 };
-                // TODO: Use local timezone if not provided.
                 return Ok(datetime);
             }
             ParseResult::Err(e) => {
