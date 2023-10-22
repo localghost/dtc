@@ -22,7 +22,7 @@ struct Args {
     verbose: bool,
 }
 
-const FORMATS: &[&str] = &["%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"];
+const FORMATS: &[&str] = &["%s", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"];
 
 static mut VERBOSE: bool = false;
 
@@ -37,65 +37,8 @@ fn verbose(message: &str) {
     }
 }
 
-// fn parse_with_forced_timezone(
-//     datetime: &str,
-//     timezone: chrono_tz::Tz,
-// ) -> Result<DateTime<FixedOffset>, ()> {
-//     for format in FORMATS {
-//         verbose(&format!("Trying out format {format}"));
-//         match NaiveDateTime::parse_and_remainder(datetime, format) {
-//             ParseResult::Ok((datetime, _)) => {
-//                 return Ok(datetime
-//                     .and_local_timezone(timezone)
-//                     .unwrap()
-//                     .fixed_offset());
-//             }
-//             ParseResult::Err(e) => {
-//                 verbose(&("Error: ".to_string() + &e.to_string()));
-//             }
-//         }
-//     }
-//     Err(())
-// }
-
-// fn parse(datetime: &str) -> Result<DateTime<FixedOffset>, ()> {
-//     for format in FORMATS {
-//         verbose(&format!("Trying out format {format}"));
-//         // Try parsing without timezone first and if it succeeds assume this is in UTC.
-//         match NaiveDateTime::parse_from_str(datetime, format) {
-//             ParseResult::Ok(datetime) => {
-//                 verbose("Timezone not provided in the datetime string, assuming UTC.");
-//                 return Ok(datetime.and_utc().into());
-//             }
-//             ParseResult::Err(e) => {
-//                 verbose(&("Error: ".to_string() + &e.to_string()));
-//             }
-//         }
-//
-//         let format = format!("{format} %z");
-//         verbose(&format!("Trying out format {format}"));
-//         match DateTime::parse_from_str(datetime, &format) {
-//             ParseResult::Ok(result) => {
-//                 return Ok(result);
-//             }
-//             ParseResult::Err(e) => {
-//                 verbose(&("Error: ".to_string() + &e.to_string()));
-//             }
-//         }
-//     }
-//     if let ParseResult::Ok(result) = DateTime::parse_from_rfc3339(datetime) {
-//         return Ok(result);
-//     }
-//     if let ParseResult::Ok(result) = DateTime::parse_from_rfc2822(datetime) {
-//         return Ok(result);
-//     }
-//
-//     Err(())
-// }
-
 fn parse(datetime: &str) -> Result<DateTime<FixedOffset>, ()> {
-    // Check if only time is provided, either with a timezone or not. If it is prefix it with local
-    // date.
+    // If only time is provided then prefix it with local date.
     let datetime = if NaiveTime::parse_and_remainder(datetime, "%H:%M:%S").is_ok() {
         verbose("Date not provieded, assuming today.");
         format!(
@@ -148,11 +91,10 @@ fn parse_datetime(datetime: &str) -> Result<DateTime<FixedOffset>, ()> {
                     datetime.and_utc().fixed_offset()
                 } else if remainder.to_lowercase() == "local" {
                     datetime.and_local_timezone(Local).unwrap().fixed_offset()
+                } else if let Ok(offset) = parse_timezone(datetime.and_utc(), remainder) {
+                    datetime.and_local_timezone(offset).unwrap().fixed_offset()
                 } else {
-                    datetime
-                        .and_local_timezone(parse_timezone(datetime.and_utc(), remainder).unwrap())
-                        .unwrap()
-                        .fixed_offset()
+                    continue;
                 };
                 return Ok(datetime);
             }
@@ -211,6 +153,14 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_timestamp() {
+        assert_eq!(
+            "2023-10-22T21:38:20+00:00",
+            parse("1698010700").unwrap().to_rfc3339()
+        );
+    }
 
     #[test]
     fn parse_rfc3339() {
