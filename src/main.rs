@@ -139,13 +139,19 @@ fn parse_datetime(datetime: &str) -> Result<DateTime<FixedOffset>, ()> {
         verbose(&format!("Trying out format {format}"));
         match NaiveDateTime::parse_and_remainder(datetime, format) {
             ParseResult::Ok((datetime, remainder)) => {
+                let remainder = remainder.trim();
+                let datetime = if remainder.is_empty() {
+                    datetime.and_utc().fixed_offset()
+                } else if remainder.to_lowercase() == "local" {
+                    datetime.and_local_timezone(Local).unwrap().fixed_offset()
+                } else {
+                    datetime
+                        .and_local_timezone(parse_timezone(datetime.and_utc(), remainder).unwrap())
+                        .unwrap()
+                        .fixed_offset()
+                };
                 // TODO: Use local timezone if not provided.
-                return Ok(datetime
-                    .and_local_timezone(
-                        parse_timezone(datetime.and_utc(), remainder.trim()).unwrap(),
-                    )
-                    .unwrap()
-                    .fixed_offset());
+                return Ok(datetime);
             }
             ParseResult::Err(e) => {
                 verbose(&("Error: ".to_string() + &e.to_string()));
