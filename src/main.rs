@@ -22,7 +22,7 @@ struct Args {
     verbose: bool,
 }
 
-const FORMATS: &[&str] = &["%s", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"];
+const FORMATS: &[&str] = &["%s", "%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"];
 
 static mut VERBOSE: bool = false;
 
@@ -59,9 +59,10 @@ fn parse(datetime: &str) -> Result<DateTime<FixedOffset>, ()> {
 // applied.
 fn parse_timezone(datetime: DateTime<Utc>, timezone: &str) -> Result<FixedOffset, ()> {
     let datetime_str = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
+    verbose(&format!("Using datestring {datetime_str}"));
     for format in &["%#z", "%:z", "%::z", "%Z"] {
-        verbose(&format!("Trying out format {format}"));
         let format = format!("%Y-%m-%d %H:%M:%S {format}");
+        verbose(&format!("Trying out format {format}"));
         let datetime_str = format!("{} {}", datetime_str, timezone.to_uppercase());
         match DateTime::parse_from_str(&datetime_str, &format) {
             ParseResult::Ok(datetime) => {
