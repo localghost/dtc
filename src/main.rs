@@ -3,6 +3,7 @@ extern crate lazy_static;
 
 use std::{collections::HashMap, process::exit};
 
+use anyhow::{anyhow, bail};
 use chrono::{
     DateTime, FixedOffset, Local, NaiveDateTime, NaiveTime, Offset, ParseResult, TimeZone, Utc,
 };
@@ -22,7 +23,12 @@ struct Args {
     verbose: bool,
 }
 
-const FORMATS: &[&str] = &["%s", "%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"];
+const FORMATS: &[&str] = &[
+    "%s",
+    "%Y-%m-%d %H:%M",
+    "%Y-%m-%d %H:%M:%S",
+    "%Y-%m-%dT%H:%M:%S",
+];
 
 static mut VERBOSE: bool = false;
 
@@ -127,7 +133,7 @@ fn convert(datetime: &DateTime<FixedOffset>, timezone: &chrono_tz::Tz) -> DateTi
     datetime.fixed_offset().with_timezone(timezone)
 }
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     unsafe {
         VERBOSE = args.verbose;
@@ -136,19 +142,20 @@ fn main() {
     let dest_tz = match TIMEZONES_DB.get(&args.dest_tz.to_lowercase()) {
         Some(tz) => tz,
         None => {
-            eprintln!(
-                "Destination timezone {} could not be found in the timezone database",
+            bail!(
+                "Destination timezone '{}' could not be found in the timezone database",
                 args.dest_tz
             );
-            exit(1);
         }
     };
 
     let datetime_parsed =
-        parse(&args.datetime).unwrap_or_else(|()| panic!("Could not parse {}", args.datetime));
+        parse(&args.datetime).map_err(|()| anyhow!("Could not parse {}", args.datetime))?;
     verbose(&datetime_parsed.to_string());
 
     println!("{}", convert(&datetime_parsed, dest_tz));
+
+    Ok(())
 }
 
 #[cfg(test)]
